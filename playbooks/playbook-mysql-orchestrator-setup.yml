@@ -1,0 +1,11 @@
+---
+
+ - name: MySQL Orchestrator install and setup
+   hosts: [orchestrator_node]
+   become: true  
+   vars:
+     orchestrator_listen_address: :80 
+ 
+   tasks:
+     - include_role:
+         name: ../roles/mysql_install_setup_orchestrator

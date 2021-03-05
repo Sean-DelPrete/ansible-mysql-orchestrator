@@ -1,0 +1,135 @@
+---
+
+- name: Ensure ca-certificates package is present
+  become: true
+  apt:
+    name: ca-certificates
+    update_cache: yes
+    cache_valid_time: 3600
+    state: present
+  when: install_mysql_packages and ansible_os_family == 'Debian'
+  tags:
+    - mysql-install
+    - mysql-install-ca-certs
+
+- name: Install MySQL repository packages from Percona web
+  become: true
+  apt:
+    deb: "{{ mysql_package.url }}/{{ mysql_package.name }}"
+    update_cache: true
+    allow_unauthenticated: true
+    install_recommends: true
+  when: install_mysql_packages and ansible_os_family == 'Debian'
+  tags:
+    - mysql-install
+    - mysql-install-pkg
+
+- name: Update apt packages for Debian family
+  become: true
+  apt:
+    force_apt_get: true
+    update_cache: true
+  when: os_package_update and ansible_os_family == 'Debian'
+  tags:
+    - mysql-install
+    - mysql-install-update
+
+- name: Upgrade apt packages for Debian family
+  become: true
+  apt:
+    force_apt_get: true
+    upgrade: true
+  when: os_package_upgrade and ansible_os_family == 'Debian'
+  tags:
+    - mysql-install
+    - mysql-install-upgrade
+
+- name: Install MySQL packages
+  become: true
+  package:
+    name: "{{ item }}"
+    state: present
+  when: install_mysql_packages
+  with_items: "{{ mysql_packages }}"
+  tags:
+    - mysql-install
+    - mysql-install-packages
+
+- name: Install Python packages
+  become: true
+  package:
+    name: "{{ item }}"
+    state: present
+  when: install_python_mysql_connector
+  with_items: "{{ python_packages }}"
+  tags:
+    - mysql-install
+    - mysql-python-packages
+
+- name: Install Python pip modules
+  become: true
+  pip:
+    name: "{{ pip_packages }}"
+    state: present
+  when: install_pip_packages
+  tags:
+    - mysql-install
+    - mysql-python-pip-packages
+
+#- name: orchestrator | config | create database
+#  become: true
+#  mysql_db:
+#    name: "{{ orchestrator_mysql_orchestrator_database }}"
+#    state: present
+
+- name: orchestrator | config | create database
+  become: true
+  command: "mysql -e 'create database if not exists {{ orchestrator_mysql_orchestrator_database }}'"
+
+#- name: orchestrator | config | create the orchestrator backend mysql user
+#  become: true
+#  mysql_user:
+#    name: "{{ orchestrator_mysql_user }}"
+#    password: "{{ orchestrator_mysql_password }}"
+#    host: "{{ orchestrator_mysql_orchestrator_host }}"
+#    priv: "{{ orchestrator_mysql_orchestrator_database }}.*:ALL"
+#    state: present
+#    config_file: ""   
+
+- name: orchestrator | config | create the orchestrator backend mysql user
+  become: true
+  command: "mysql -e 'GRANT ALL on {{ orchestrator_mysql_orchestrator_database }}.* to \"{{ orchestrator_mysql_user }}\"@\"{{ orchestrator_mysql_orchestrator_host }}\" IDENTIFIED BY \"{{ orchestrator_mysql_password }}\" '"
+
+- name: orchestrator | config | copy orchestrator config
+  template:
+    src: orchestrator.conf.json.j2
+    dest: /etc/orchestrator.conf.json
+    owner: "{{ orchestrator_user }}"
+    group: "{{ orchestrator_group }}"
+    mode: 0640
+  notify:
+    - restart orchestrator
+
+- name: orchestrator | config | copy orchestrator backend credentials
+  template:
+    src: orchestrator-backend.cnf.j2
+    dest: /etc/mysql/orchestrator-backend.cnf
+    owner: "{{ orchestrator_user }}"
+    group: "{{ orchestrator_group }}"
+    mode: 0640
+
+- name: orchestrator | config | copy mysql topology credentials
+  template:
+    src: orchestrator-topology.cnf.j2
+    dest: /etc/mysql/orchestrator-topology.cnf
+    owner: "{{ orchestrator_user }}"
+    group: "{{ orchestrator_group }}"
+    mode: 0640
+
+- name: orchestrator | config | enable and start orchestrator
+  service:
+    name: orchestrator
+    state: "{{ orchestrator_service_state }}"
+    enabled: yes
+#  become: true
+#  become_user: orchestrator
